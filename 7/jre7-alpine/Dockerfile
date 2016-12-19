@@ -1,4 +1,4 @@
-FROM openjdk:7-jre-alpine
+FROM denghui/openjdk:7-jre-alpine-tz.8
 
 ENV CATALINA_HOME /usr/local/tomcat
 ENV PATH $CATALINA_HOME/bin:$PATH
