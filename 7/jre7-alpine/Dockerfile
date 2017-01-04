@@ -87,9 +87,9 @@ RUN set -e \
 		exit 1; \
 	fi
 
-ADD create_tomcat_admin_user.sh bin/create_tomcat_admin_user.sh
-ADD run.sh bin/run.sh
-RUN chmod +x bin/*.sh
+ADD create_tomcat_admin_user.sh /create_tomcat_admin_user.sh
+ADD run.sh /run.sh
+RUN chmod +x /*.sh
 
 EXPOSE 8080
 CMD ["run.sh"]
