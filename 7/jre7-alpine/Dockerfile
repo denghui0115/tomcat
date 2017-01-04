@@ -41,8 +41,8 @@ RUN set -x \
 	&& rm bin/*.bat \
 	&& rm tomcat.tar.gz* \
 	\
-	&& rm -fr tomcat/webapps/examples  \
-    	&& rm -fr tomcat/webapps/docs \
+	&& rm -fr webapps/examples  \
+    	&& rm -fr webapps/docs \
 	\
 	&& nativeBuildDir="$(mktemp -d)" \
 	&& tar -xvf bin/tomcat-native.tar.gz -C "$nativeBuildDir" --strip-components=1 \
@@ -87,9 +87,9 @@ RUN set -e \
 		exit 1; \
 	fi
 
-ADD create_tomcat_admin_user.sh /create_tomcat_admin_user.sh
-ADD run.sh /run.sh
-RUN chmod +x /*.sh
+ADD create_tomcat_admin_user.sh bin/create_tomcat_admin_user.sh
+ADD run.sh bin/run.sh
+RUN chmod +x bin/*.sh
 
 EXPOSE 8080
-CMD ["/run.sh"]
+CMD ["run.sh"]
