@@ -1,5 +1,6 @@
 FROM denghui/openjdk:7-jre-alpine-tz.8
 
+ENV JAVA_OPTS ""
 ENV CATALINA_HOME /usr/local/tomcat
 ENV PATH $CATALINA_HOME/bin:$PATH
 RUN mkdir -p "$CATALINA_HOME"
@@ -40,6 +41,9 @@ RUN set -x \
 	&& rm bin/*.bat \
 	&& rm tomcat.tar.gz* \
 	\
+	&& rm -fr tomcat/webapps/examples  \
+    	&& rm -fr tomcat/webapps/docs \
+	\
 	&& nativeBuildDir="$(mktemp -d)" \
 	&& tar -xvf bin/tomcat-native.tar.gz -C "$nativeBuildDir" --strip-components=1 \
 	&& apk add --no-cache --virtual .native-build-deps \
@@ -71,7 +75,7 @@ RUN set -x \
 	&& apk add --virtual .tomcat-native-rundeps $runDeps \
 	&& apk del .fetch-deps .native-build-deps \
 	&& rm -rf "$nativeBuildDir" \
-	&& rm bin/tomcat-native.tar.gz
+	&& rm bin/tomcat-native.tar.gz 
 
 # verify Tomcat Native is working properly
 RUN set -e \
@@ -83,5 +87,9 @@ RUN set -e \
 		exit 1; \
 	fi
 
+ADD create_tomcat_admin_user.sh /create_tomcat_admin_user.sh
+ADD run.sh /run.sh
+RUN chmod +x /*.sh
+
 EXPOSE 8080
-CMD ["catalina.sh", "run"]
+CMD ["run.sh"]
