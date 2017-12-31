@@ -1,6 +1,6 @@
 FROM denghui/openjdk:7-jre-alpine-tz.8
+MAINTAINER denghui <denghui0115@163.com>
 
-ENV JAVA_OPTS ""
 ENV CATALINA_HOME /usr/local/tomcat
 ENV PATH $CATALINA_HOME/bin:$PATH
 RUN mkdir -p "$CATALINA_HOME"
@@ -21,62 +21,97 @@ RUN set -ex; \
 	done
 
 ENV TOMCAT_MAJOR 7
-ENV TOMCAT_VERSION 7.0.73
+ENV TOMCAT_VERSION 7.0.82
+ENV TOMCAT_SHA1 4681bfbc86bb4da76a7aabbb3c545475eb9a8075
 
+ENV TOMCAT_TGZ_URLS \
 # https://issues.apache.org/jira/browse/INFRA-8753?focusedCommentId=14735394#comment-14735394
-ENV TOMCAT_TGZ_URL https://www.apache.org/dyn/closer.cgi?action=download&filename=tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz
-# not all the mirrors actually carry the .asc files :'(
-ENV TOMCAT_ASC_URL https://www.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz.asc
+	https://www.apache.org/dyn/closer.cgi?action=download&filename=tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz \
+# if the version is outdated, we might have to pull from the dist/archive :/
+	https://www-us.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz \
+	https://www.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz \
+	https://archive.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz
 
-RUN set -x \
+ENV TOMCAT_ASC_URLS \
+	https://www.apache.org/dyn/closer.cgi?action=download&filename=tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz.asc \
+# not all the mirrors actually carry the .asc files :'(
+	https://www-us.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz.asc \
+	https://www.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz.asc \
+	https://archive.apache.org/dist/tomcat/tomcat-$TOMCAT_MAJOR/v$TOMCAT_VERSION/bin/apache-tomcat-$TOMCAT_VERSION.tar.gz.asc
+
+RUN set -eux; \
 	\
-	&& apk add --no-cache --virtual .fetch-deps \
+	apk add --no-cache --virtual .fetch-deps \
 		ca-certificates \
-		tar \
 		openssl \
-		pwgen \
-	&& wget -O tomcat.tar.gz "$TOMCAT_TGZ_URL" \
-	&& wget -O tomcat.tar.gz.asc "$TOMCAT_ASC_URL" \
-	&& gpg --batch --verify tomcat.tar.gz.asc tomcat.tar.gz \
-	&& tar -xvf tomcat.tar.gz --strip-components=1 \
-	&& rm bin/*.bat \
-	&& rm tomcat.tar.gz* \
+	; \
 	\
-	&& rm -fr webapps/examples  \
-    	&& rm -fr webapps/docs \
+	success=; \
+	for url in $TOMCAT_TGZ_URLS; do \
+		if wget -O tomcat.tar.gz "$url"; then \
+			success=1; \
+			break; \
+		fi; \
+	done; \
+	[ -n "$success" ]; \
 	\
-	&& nativeBuildDir="$(mktemp -d)" \
-	&& tar -xvf bin/tomcat-native.tar.gz -C "$nativeBuildDir" --strip-components=1 \
-	&& apk add --no-cache --virtual .native-build-deps \
+	echo "$TOMCAT_SHA1 *tomcat.tar.gz" | sha1sum -c -; \
+	\
+	success=; \
+	for url in $TOMCAT_ASC_URLS; do \
+		if wget -O tomcat.tar.gz.asc "$url"; then \
+			success=1; \
+			break; \
+		fi; \
+	done; \
+	[ -n "$success" ]; \
+	\
+	gpg --batch --verify tomcat.tar.gz.asc tomcat.tar.gz; \
+	tar -xvf tomcat.tar.gz --strip-components=1; \
+	rm bin/*.bat; \
+	rm tomcat.tar.gz*; \
+	\
+	nativeBuildDir="$(mktemp -d)"; \
+	tar -xvf bin/tomcat-native.tar.gz -C "$nativeBuildDir" --strip-components=1; \
+	apk add --no-cache --virtual .native-build-deps \
 		apr-dev \
+		coreutils \
+		dpkg-dev dpkg \
 		gcc \
 		libc-dev \
 		make \
 		"openjdk${JAVA_VERSION%%[-~bu]*}"="$JAVA_ALPINE_VERSION" \
 		openssl-dev \
-	&& ( \
-		export CATALINA_HOME="$PWD" \
-		&& cd "$nativeBuildDir/native" \
-		&& ./configure \
+	; \
+	( \
+		export CATALINA_HOME="$PWD"; \
+		cd "$nativeBuildDir/native"; \
+		gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)"; \
+		./configure \
+			--build="$gnuArch" \
 			--libdir="$TOMCAT_NATIVE_LIBDIR" \
 			--prefix="$CATALINA_HOME" \
 			--with-apr="$(which apr-1-config)" \
 			--with-java-home="$(docker-java-home)" \
-			--with-ssl=yes \
-		&& make -j$(getconf _NPROCESSORS_ONLN) \
-		&& make install \
-	) \
-	&& runDeps="$( \
-		scanelf --needed --nobanner --recursive "$TOMCAT_NATIVE_LIBDIR" \
-			| awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
+			--with-ssl=yes; \
+		make -j "$(nproc)"; \
+		make install; \
+	); \
+	runDeps="$( \
+		scanelf --needed --nobanner --format '%n#p' --recursive "$TOMCAT_NATIVE_LIBDIR" \
+			| tr ',' '\n' \
 			| sort -u \
-			| xargs -r apk info --installed \
-			| sort -u \
-	)" \
-	&& apk add --virtual .tomcat-native-rundeps $runDeps \
-	&& apk del .fetch-deps .native-build-deps \
-	&& rm -rf "$nativeBuildDir" \
-	&& rm bin/tomcat-native.tar.gz 
+			| awk 'system("[ -e /usr/local/lib/" $1 " ]") == 0 { next } { print "so:" $1 }' \
+	)"; \
+	apk add --virtual .tomcat-native-rundeps $runDeps; \
+	apk del .fetch-deps .native-build-deps; \
+	rm -rf "$nativeBuildDir"; \
+	rm bin/tomcat-native.tar.gz; \
+	\
+# sh removes env vars it doesn't support (ones with periods)
+# https://github.com/docker-library/tomcat/issues/77
+	apk add --no-cache bash; \
+	find ./bin/ -name '*.sh' -exec sed -ri 's|^#!/bin/sh$|#!/usr/bin/env bash|' '{}' +
 
 # verify Tomcat Native is working properly
 RUN set -e \
