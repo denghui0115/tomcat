@@ -1,6 +1,9 @@
 FROM denghui/openjdk:7-jre-alpine-tz.8
 MAINTAINER denghui <denghui0115@163.com>
 
+# Default to UTF-8 file.encoding
+ENV LANG C.UTF-8
+
 ENV CATALINA_HOME /usr/local/tomcat
 ENV PATH $CATALINA_HOME/bin:$PATH
 RUN mkdir -p "$CATALINA_HOME"
@@ -128,4 +131,8 @@ ADD run.sh bin/run.sh
 RUN chmod +x bin/*.sh
 
 EXPOSE 8080
+
+# Default to UTF-8 file.encoding
+ENV LANG zh_CN.UTF-8
+
 CMD ["run.sh"]
